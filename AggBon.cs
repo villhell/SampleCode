@@ -1,4 +1,4 @@
-﻿using CatSdk.CryptoTypes;
+using CatSdk.CryptoTypes;
 using CatSdk.Facade;
 using CatSdk.Symbol;
 using CatSdk.Symbol.Factory;
@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.WebRequestMethods;
@@ -31,11 +32,14 @@ namespace nagexym
         {
             // TESTNET
             var node = "http://160.248.184.223:3000";
-            var alicePrivateKey = new PrivateKey("PRIVATE_KEY");
+            var alicePrivateKey = new PrivateKey("ALICE_PRIVATE_KEY");
             var aliceKeypair = new KeyPair(alicePrivateKey);
+            var bobPrivateKey = new PrivateKey("BOB_PRIVATE_KEY");
+            var bobKeyPair = new KeyPair(bobPrivateKey);
+
             ulong mosaicId = ulong.Parse("72C0212E67A08BCE", System.Globalization.NumberStyles.HexNumber);
             ulong amount = 10000000;
-            SymbolFacade facade = new SymbolFacade(CatSdk.Symbol.Network.TestNet);
+            SymbolFacade facade = new SymbolFacade(Network.TestNet);
 
             var message = Converter.Utf8ToPlainMessage("hello symbol!");
             var networkType = NetworkType.TESTNET;
@@ -60,8 +64,8 @@ namespace nagexym
             txs.Add(new EmbeddedTransferTransactionV1
             {
                 Network = networkType,
-                SignerPublicKey = aliceKeypair.PublicKey,
-                RecipientAddress = new UnresolvedAddress(Converter.StringToAddress("ALICE_ADDRESS")),
+                SignerPublicKey = bobKeyPair.PublicKey,
+                RecipientAddress = new UnresolvedAddress(Converter.StringToAddress("BOB_ADDRESS")),
                 Mosaics = new UnresolvedMosaic[]
                 {
                     new()
@@ -85,11 +89,19 @@ namespace nagexym
                 Deadline = new Timestamp(facade.Network.FromDatetime<NetworkTimestamp>(DateTime.UtcNow).AddHours(2).Timestamp),
             };
 
-            var aggTxHash = facade.HashTransaction(aggTx);
             // アグリゲートボンデットTxに署名
             var signature = facade.SignTransaction(aliceKeypair, aggTx);
             // アグリゲートボンデットのペイロード
-            var aggTxPayload = TransactionsFactory.AttachSignature(aggTx, signature);
+            TransactionsFactory.AttachSignature(aggTx, signature);
+
+            var aggTxHash = facade.HashTransaction(aggTx);
+            //var bobCosignature = new Cosignature
+            //{
+            //    Signature = bobKeyPair.Sign(aggTxHash.bytes),
+            //    SignerPublicKey = bobKeyPair.PublicKey
+            //};
+            //aggTx.Cosignatures = new[] { bobCosignature };
+            var aggTxPayload = TransactionsFactory.CreatePayload(aggTx);
 
             // ハッシュロックTx作成
             var hashLockTx = new HashLockTransactionV1
